@@ -44,10 +44,20 @@ def save_post(user, text, file):
     conn.commit()
     conn.close()
 
+def delete_post(post_id, file_path):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # Elimina il file fisico se esiste
+    if file_path and os.path.exists(file_path):
+        os.remove(file_path)
+    # Elimina il record dal DB
+    c.execute("DELETE FROM posts WHERE id = ?", (post_id,))
+    conn.commit()
+    conn.close()
+
 # --- INTERFACCIA STREAMLIT ---
 st.set_page_config(page_title="Mini Social App", layout="centered")
 
-# Gestione Sessione Utente
 if 'username' not in st.session_state:
     st.session_state.username = None
 
@@ -59,13 +69,11 @@ if st.session_state.username is None:
             st.session_state.username = user_input
             st.rerun()
 else:
-    # Sidebar per Logout e Info
     st.sidebar.title(f"Ciao, {st.session_state.username}!")
     if st.sidebar.button("Logout"):
         st.session_state.username = None
         st.rerun()
 
-    # Sezione Creazione Post
     st.header("Crea un nuovo post")
     with st.expander("Scrivi qualcosa..."):
         post_text = st.text_area("Cosa hai in mente?")
@@ -81,7 +89,6 @@ else:
 
     st.divider()
 
-    # Visualizzazione Feed
     st.subheader("Feed della Community")
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM posts ORDER BY id DESC", conn)
@@ -90,7 +97,19 @@ else:
     if not df.empty:
         for index, row in df.iterrows():
             with st.container(border=True):
-                st.subheader(f"👤 {row['user']}")
+                # Header del post con pulsante elimina a destra se l'utente è l'autore
+                col_user, col_del = st.columns([0.8, 0.2])
+                
+                with col_user:
+                    st.subheader(f"👤 {row['user']}")
+                
+                # Mostra pulsante elimina solo se il post appartiene all'utente corrente
+                if row['user'] == st.session_state.username:
+                    with col_del:
+                        if st.button("Elimina", key=f"del_{row['id']}"):
+                            delete_post(row['id'], row['file_path'])
+                            st.rerun()
+
                 st.caption(f"Pubblicato il: {row['timestamp']}")
                 
                 if row['content']:
